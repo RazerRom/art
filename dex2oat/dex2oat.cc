@@ -585,7 +585,7 @@ static size_t OpenDexFiles(const std::vector<const char*>& dex_filenames,
 // during development when fatal aborts lead to a cascade of failures
 // that result in a deadlock.
 class WatchDog {
-// WatchDog defines its own CHECK_PTHREAD_CALL to avoid using Log which uses locks
+// WatchDog defines its own CHECK_PTHREAD_CALL to avoid using LOG which uses locks
 #undef CHECK_PTHREAD_CALL
 #define CHECK_WATCH_DOG_PTHREAD_CALL(call, args, what) \
   do { \
@@ -648,18 +648,12 @@ class WatchDog {
             message.c_str());
   }
 
-  static void Warn(const std::string& message) {
-    Message('W', message);
-  }
-
   static void Fatal(const std::string& message) {
     Message('F', message);
     exit(1);
   }
 
   void Wait() {
-    bool warning = true;
-    CHECK_GT(kWatchDogTimeoutSeconds, kWatchDogWarningSeconds);
     // TODO: tune the multiplier for GC verification, the following is just to make the timeout
     //       large.
     int64_t multiplier = kVerifyObjectSupport > kVerifyObjectModeFast ? 100 : 1;
@@ -670,19 +664,9 @@ class WatchDog {
     const char* reason = "dex2oat watch dog thread waiting";
     CHECK_WATCH_DOG_PTHREAD_CALL(pthread_mutex_lock, (&mutex_), reason);
     while (!shutting_down_) {
-      int rc = TEMP_FAILURE_RETRY(pthread_cond_timedwait(&cond_, &mutex_,
-                                                         warning ? &warning_ts
-                                                                 : &timeout_ts));
+      int rc = TEMP_FAILURE_RETRY(pthread_cond_timedwait(&cond_, &mutex_, &timeout_ts));
       if (rc == ETIMEDOUT) {
-        std::string message(StringPrintf("dex2oat did not finish after %d seconds",
-                                         warning ? kWatchDogWarningSeconds
-                                                 : kWatchDogTimeoutSeconds));
-        if (warning) {
-          Warn(message.c_str());
-          warning = false;
-        } else {
-          Fatal(message.c_str());
-        }
+        Fatal(StringPrintf("dex2oat did not finish after %d seconds", kWatchDogTimeoutSeconds));
       } else if (rc != 0) {
         std::string message(StringPrintf("pthread_cond_timedwait failed: %s",
                                          strerror(errno)));
@@ -715,7 +699,6 @@ class WatchDog {
   pthread_attr_t attr_;
   pthread_t pthread_;
 };
-const unsigned int WatchDog::kWatchDogWarningSeconds;
 const unsigned int WatchDog::kWatchDogTimeoutSeconds;
 
 // Given a set of instruction features from the build, parse it.  The
@@ -1341,7 +1324,8 @@ static int dex2oat(int argc, char** argv) {
     if (kSaveDexInput) {
       for (size_t i = 0; i < dex_files.size(); ++i) {
         const DexFile* dex_file = dex_files[i];
-        std::string tmp_file_name(StringPrintf("/data/local/tmp/dex2oat.%d.%zd.dex", getpid(), i));
+        std::string tmp_file_name(StringPrintf("/data/local/tmp/dex2oat.%d.%zd.dex",
+                                               getpid(), i));
         std::unique_ptr<File> tmp_file(OS::CreateEmptyFile(tmp_file_name.c_str()));
         if (tmp_file.get() == nullptr) {
             PLOG(ERROR) << "Failed to open file " << tmp_file_name
