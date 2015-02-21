@@ -186,7 +186,8 @@ ifeq ($(ART_SEA_IR_MODE),true)
 endif
 
 art_non_debug_cflags := \
-  -O3
+  -O3 \
+  -lto
 
 art_host_non_debug_cflags := \
   $(art_non_debug_cflags)
